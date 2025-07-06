@@ -1,16 +1,22 @@
 import { z } from 'zod';
 import { baseProcedure, createTRPCRouter } from '../init';
+import { inngest } from '@/inngest/client';
 export const appRouter = createTRPCRouter({
-  hello: baseProcedure
+  prompt: baseProcedure
     .input(
       z.object({
-        text: z.string(),
+        value: z.string(),
       }),
     )
-    .query((opts) => {
-      console.log('input payload',opts.input)
+    .mutation(async ({ input }) => {
+      await inngest.send({
+        name: "test/hello",
+        data: {
+          input: input.value
+        }
+      })
       return {
-        greeting: `hello ${opts.input.text}`,
+        ok: `your prompt is being process`,
       };
     }),
 });

@@ -1,26 +1,28 @@
-import { Greeting } from "@/components/greeting";
+'use client'
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useTRPC } from "@/trpc/client";
-import { caller, getQueryClient, trpc } from "@/trpc/server";
-import { dehydrate, HydrationBoundary, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 
-export default async function Home() {
-  const queryClient = getQueryClient();
-  void queryClient.prefetchQuery(trpc.hello.queryOptions({
-    text: "bilal"
-  }))
-  const greeting = await caller.hello({
-    text: "samir"
-  });
+import { useState } from 'react'
+
+const Page = () => {
+  const [value, setValue] = useState('')
+  const trpc = useTRPC();
+  const prompt = useMutation(trpc.prompt.mutationOptions());
   return (
-    <HydrationBoundary state={dehydrate(queryClient)}>
-
-      <div className="h-screen w-full items-center flex-col flex justify-center bg-neutral-900 text-neutral-300">
-        <Greeting />
-        {
-          JSON.stringify(greeting)
-        }
-      </div>
-
-    </HydrationBoundary>
+    <div className="flex flex-col gap-y-2 items-center justify-center w-full h-screen">
+      <Input  className="max-w-lg" value={value} onChange={(e) => setValue(e.target.value)} />
+      <Button
+        type="button"
+        className="cursor-pointer font-medium"
+        disabled={prompt.isPending}
+        onClick={() => prompt.mutate({ value })}>
+        ask grok
+      </Button>
+    </div>
   );
 }
+
+
+export default Page;
