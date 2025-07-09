@@ -1,26 +1,8 @@
-import { createAgent, createNetwork, createTool, gemini, openai } from "@inngest/agent-kit";
-import { inngest } from "./client";
-import { Sandbox } from '@e2b/code-interpreter';
-import { getSandbox, lastAssistantTextMessageContent } from "./utils";
-import z from "zod";
-import { PROMPT } from "@/prompte";
-export const helloworld = inngest.createFunction(
-
-  { id: "functionName" },
-
-  { event: "test/hello" },
-
-  async ({ event, step }) => {
-
-    const SandboxId = await step.run("get-sandbox-id", async () => {
-      const sandbox = await Sandbox.create("nte")
-      return sandbox.sandboxId;
-    })
-    const codeAgent = createAgent({
+ const codeAgent = createAgent({
       name: "code-agent",
       description: "An expert coding agent",
       system: PROMPT,
-      model: gemini({ model: "gemini-2.0-flash-lite" }),
+      model: openai({ model: "gpt-4" }),
       tools: [
         createTool({
           name: "terminal",
@@ -135,20 +117,3 @@ export const helloworld = inngest.createFunction(
     })
 
     const result = await network.run(event.data.input)
-
-    const sandboxUrl = await step.run("get-sandbox-url", async () => {
-      const sandbox = await getSandbox(SandboxId)
-      const host = sandbox.getHost(3000);
-      return `https://${host}`
-    })
-    console.log("the input", event.data.input)
-    return {
-      url: sandboxUrl,
-      title: "Fragment",
-      files: result.state.data.files,
-      summary: result.state.data.summary
-    }
-  }
-
-)
-
