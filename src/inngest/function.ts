@@ -1,14 +1,24 @@
-import { createAgent, createNetwork, createTool, gemini, openai } from "@inngest/agent-kit";
+import { createAgent, createNetwork, createTool, openai, type Tool } from "@inngest/agent-kit";
 import { inngest } from "./client";
 import { Sandbox } from '@e2b/code-interpreter';
 import { getSandbox, lastAssistantTextMessageContent } from "./utils";
 import z from "zod";
 import { PROMPT } from "@/prompte";
-export const helloworld = inngest.createFunction(
+import prisma from "@/lib/prisma";
 
-  { id: "functionName" },
+interface agentState {
+  summary : string;
+  files : {
+    [path : string] : string
+  }
+}
 
-  { event: "test/hello" },
+
+export const codeAgentFunction= inngest.createFunction(
+
+  { id: "code-agent" },
+
+  { event: "code-agent/run" },
 
   async ({ event, step }) => {
 
@@ -16,11 +26,20 @@ export const helloworld = inngest.createFunction(
       const sandbox = await Sandbox.create("nte")
       return sandbox.sandboxId;
     })
-    const codeAgent = createAgent({
+
+    console.log("SandboxId:", SandboxId);
+    console.log("Running input:", event.data.input);
+
+    const codeAgent = createAgent<agentState>({
       name: "code-agent",
       description: "An expert coding agent",
       system: PROMPT,
-      model: gemini({ model: "gemini-2.0-flash-lite" }),
+      model: openai({
+        model: "llama-3.3-70b-versatile",
+        baseUrl: "https://api.groq.com/openai/v1",
+        apiKey: process.env.GROQ_API_KEY
+      }),
+
       tools: [
         createTool({
           name: "terminal",
@@ -63,7 +82,7 @@ export const helloworld = inngest.createFunction(
               content: z.string(),
             }))
           }),
-          handler: async ({ files }, { step, network }) => {
+          handler: async ({ files }, { step, network } : Tool.Options<agentState>) => {
             const newFiles = await step?.run("createOrUpdateFiles", async () => {
               try {
                 const updateFiles = network.state.data.files || {};
@@ -95,7 +114,7 @@ export const helloworld = inngest.createFunction(
                 const sandbox = await getSandbox(SandboxId);
                 const contents = []
                 for (const file of files) {
-                  const content = sandbox.files.read(file)
+                  const content = await sandbox.files.read(file)
                   contents.push({ path: file, content })
                 }
 
@@ -120,7 +139,7 @@ export const helloworld = inngest.createFunction(
         }
       }
     });
-    const network = createNetwork({
+    const network = createNetwork<agentState>({
       name: "codeAgentNetwork",
       agents: [codeAgent],
       maxIter: 15,
@@ -135,13 +154,46 @@ export const helloworld = inngest.createFunction(
     })
 
     const result = await network.run(event.data.input)
+    const isError = !result.state.data.summary || Object.keys(result.state.data.files || {}).length === 0
+    
+    if (!result || !result.state || !result.state.data) {
+      console.error("No result or state returned");
+    }
 
     const sandboxUrl = await step.run("get-sandbox-url", async () => {
       const sandbox = await getSandbox(SandboxId)
       const host = sandbox.getHost(3000);
       return `https://${host}`
     })
-    console.log("the input", event.data.input)
+
+    await step.run("save-result", async () => {
+      if (isError){
+        return await prisma.message.create({
+          data : {
+            content : "Something went wrong, Please try again ",
+            role : "ASSISTANT",
+            type : "ERROR"
+          }
+        })
+      }
+
+      return await prisma.message.create({
+        data:
+        {
+          content: result.state.data.summary,
+          role: "ASSISTANT",
+          type: "RESULT",
+          fragment: {
+            create: {
+              sandboxUrl: sandboxUrl as string,
+              title: 'Fragment',
+              files: result.state.data.files,
+            }
+          }
+        }
+      })
+    })
+
     return {
       url: sandboxUrl,
       title: "Fragment",

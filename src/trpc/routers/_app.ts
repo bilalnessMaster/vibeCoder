@@ -1,24 +1,12 @@
-import { z } from 'zod';
-import { baseProcedure, createTRPCRouter } from '../init';
-import { inngest } from '@/inngest/client';
+import { createTRPCRouter } from '../init';
+import { messagesRouter } from '@/modules/messages/server/procedure';
+
+
 export const appRouter = createTRPCRouter({
-  prompt: baseProcedure
-    .input(
-      z.object({
-        value: z.string(),
-      }),
-    )
-    .mutation(async ({ input }) => {
-      await inngest.send({
-        name: "test/hello",
-        data: {
-          input: input.value
-        }
-      })
-      return {
-        ok: `your prompt is being process`,
-      };
-    }),
+  messages: messagesRouter,
 });
+
+
+
 // export type definition of API
 export type AppRouter = typeof appRouter;
